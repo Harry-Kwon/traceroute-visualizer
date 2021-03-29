@@ -1,4 +1,4 @@
-import socket
+import socket, threading
 
 def _create_sender(ttl):
     """creates a UDP socket with a set time-to-live value
@@ -16,8 +16,7 @@ def _create_sender(ttl):
     return sock
 
 def _create_receiver(port, timeout=10.0):
-    sock = socket.socket(
-        family=socket.AF_INET,
+    sock = socket.socket(family=socket.AF_INET,
         type=socket.SOCK_RAW,
         proto=socket.IPPROTO_ICMP
     )
@@ -31,7 +30,7 @@ def _create_receiver(port, timeout=10.0):
     
     return sock
 
-def traceroute(address, port=33434, max_ttl=30, max_tries=3, ):
+def traceroute_generator(address, port=33434, max_ttl=30, max_tries=3):
     """Perform a traceroute to the specified address
 
     Args:
@@ -67,15 +66,35 @@ def traceroute(address, port=33434, max_ttl=30, max_tries=3, ):
                 sender_socket.close()
                 receiver_socket.close()
 
-            # yield the address if not null
+        # yield the address if not null
+        addr = None if addr==None else addr[0]
         yield(addr)
 
-        
+def traceroute(callback, address, *args):
+    """performs a traceroute and calls the callback at each address resolved
+
+    Args:
+        address (str): traceroute destination
+        callback (function): callback function. called with a tuple ((int) hop, (str) destination_address)
+        *args: arguments to traceroute_generator
+    """
+    route = traceroute_generator(address, *args)
+    i=0
+    for addr in route:
+        addr = "*" if addr==None else addr
+        callback(i:=i+1, addr)
+
+def threaded_traceroute(callback, address, *args):
+    """creates a thread and runs traceroute with the passed callback
+
+    Args:
+        address (str): traceroute destination
+        callback (function): callback function for traceroute
+    """
+    worker_thread = threading.Thread(target=traceroute, args=(callback, address, *args))
+    worker_thread.start()
 
 if __name__ == "__main__":
     import sys
 
-    max_hops = 30
-    traceroute_generator = traceroute(sys.argv[1], max_ttl=max_hops)
-    for i in range(max_hops):
-        print(f"{i}: {next(traceroute_generator)}")
+    traceroute(sys.argv[1], print)
